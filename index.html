@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>🌋 Simulasi Gunung Meletus 3D — Media Belajar IPA</title>
+<meta name="description" content="Simulasi 3D interaktif gunung meletus untuk pembelajaran IPA. Level status gunung berapi Indonesia (Normal, Waspada, Siaga, Awas).">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:100%; height:100%; overflow:hidden; background:#0d0d1f; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:#eee; }
+  #scene { position:fixed; inset:0; }
+  canvas { display:block; touch-action:none; }
+
+  /* ---------- HUD ---------- */
+  .hud { position:fixed; z-index:10; pointer-events:none; }
+  .card { background:rgba(13,13,31,.72); border:1px solid rgba(255,255,255,.14); border-radius:14px; backdrop-filter:blur(10px); box-shadow:0 8px 30px rgba(0,0,0,.45); }
+
+  /* Title */
+  #title { top:14px; left:14px; padding:12px 16px; max-width:min(340px, calc(100vw - 28px)); }
+  #title h1 { font-size:18px; line-height:1.25; }
+  #title h1 span { font-size:15px; }
+  #title p { font-size:11.5px; opacity:.75; margin-top:4px; }
+
+  /* Status */
+  #status { top:14px; right:14px; padding:10px 14px; min-width:200px; max-width:calc(100vw - 28px); text-align:right; }
+  #status .lvl { font-size:12px; letter-spacing:2px; opacity:.8; }
+  #status .nm { font-size:20px; font-weight:800; margin:2px 0; }
+  #status .ds { font-size:11.5px; opacity:.85; line-height:1.35; }
+  #status .rd { font-size:10.5px; opacity:.65; margin-top:4px; }
+
+  /* Hint */
+  #hint { bottom:86px; left:14px; font-size:11px; opacity:.55; padding:6px 10px; border-radius:8px; }
+
+  /* Level bar */
+  #bar { bottom:16px; left:50%; transform:translateX(-50%); display:flex; gap:8px; padding:10px 12px; pointer-events:auto; max-width:calc(100vw - 20px); flex-wrap:wrap; justify-content:center; }
+  .lvlbtn { border:0; border-radius:10px; padding:9px 14px; font-size:12.5px; font-weight:700; color:#fff; cursor:pointer; opacity:.38; transition:.18s; letter-spacing:.4px; font-family:inherit; }
+  .lvlbtn.on { opacity:1; transform:translateY(-3px); box-shadow:0 6px 18px rgba(0,0,0,.5); }
+  .lvlbtn:active { transform:translateY(-1px); }
+  .l1 { background:#22c55e; } .l2 { background:#eab308; } .l3 { background:#f97316; } .l4 { background:#ef4444; }
+  #auto { border:1px solid rgba(255,255,255,.35); background:transparent; color:#eee; border-radius:10px; padding:9px 14px; font-size:12.5px; font-weight:600; cursor:pointer; font-family:inherit; transition:.18s; }
+  #auto.on { background:rgba(255,255,255,.18); border-color:#fff; }
+
+  /* Materi button + panel */
+  #matBtn { right:14px; bottom:16px; padding:10px 16px; font-size:13px; font-weight:700; cursor:pointer; pointer-events:auto; border:1px solid rgba(255,255,255,.25); background:rgba(13,13,31,.72); color:#eee; border-radius:12px; font-family:inherit; backdrop-filter:blur(10px); }
+  #panel { right:14px; bottom:64px; width:min(360px, calc(100vw - 28px)); max-height:min(62vh, 520px); display:flex; flex-direction:column; overflow:hidden; pointer-events:auto; opacity:0; transform:translateY(14px) scale(.98); visibility:hidden; transition:.22s; }
+  #panel.open { opacity:1; transform:none; visibility:visible; }
+  #tabs { display:flex; border-bottom:1px solid rgba(255,255,255,.12); }
+  .tab { flex:1; text-align:center; padding:10px 4px; font-size:11.5px; font-weight:600; cursor:pointer; opacity:.55; border-bottom:2px solid transparent; transition:.15s; }
+  .tab.on { opacity:1; border-bottom-color:#f97316; }
+  #pbody { overflow-y:auto; padding:14px 16px; font-size:12.5px; line-height:1.6; }
+  #pbody h3 { font-size:13.5px; margin-bottom:6px; color:#ffb56b; }
+  #pbody ul { padding-left:18px; margin:4px 0; }
+  #pbody li { margin:3px 0; }
+  #pbody .lvrow { display:flex; gap:10px; align-items:flex-start; margin:8px 0; }
+  #pbody .dot { width:12px; height:12px; border-radius:50%; margin-top:4px; flex-shrink:0; }
+  #pbody b { color:#fff; }
+  #pbody .note { font-size:10.5px; opacity:.55; margin-top:8px; }
+
+  /* Flash overlay (erupsi besar) */
+  #flash { position:fixed; inset:0; z-index:5; pointer-events:none; background:radial-gradient(ellipse at 50% 62%, rgba(255,60,0,0) 30%, rgba(255,60,0,.5) 100%); opacity:0; }
+
+  #loading { position:fixed; inset:0; z-index:50; display:flex; flex-direction:column; gap:12px; align-items:center; justify-content:center; background:#0d0d1f; font-size:14px; transition:opacity .4s; }
+  #loading.hide { opacity:0; pointer-events:none; }
+  #loading .sp { width:34px; height:34px; border:3px solid rgba(255,255,255,.2); border-top-color:#f97316; border-radius:50%; animation:spin 0.9s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  @media (max-width:560px) {
+    #status { top:auto; right:14px; left:14px; bottom:118px; min-width:0; text-align:left; }
+    #title { padding:10px 12px; }
+    #title h1 { font-size:15px; }
+    #hint { display:none; }
+    #bar { width:calc(100vw - 16px); }
+    #matBtn { right:14px; bottom:16px; }
+    #panel { right:14px; left:14px; width:auto; bottom:64px; }
+  }
+</style>
+</head>
+<body>
+<div id="scene"></div>
+<div id="flash"></div>
+
+<div class="hud card" id="title">
+  <h1><span>🌋</span> Simulasi Gunung Meletus 3D</h1>
+  <p>Media pembelajaran IPA • 3D interaktif (Three.js)</p>
+</div>
+
+<div class="hud card" id="status">
+  <div class="lvl">LEVEL STATUS GUNUNG API</div>
+  <div class="nm" id="stName" style="color:#22c55e">NORMAL</div>
+  <div class="ds" id="stDesc">Aktivitas gunung normal. Tidak ada indikasi bahaya.</div>
+  <div class="rd" id="stRadius">—</div>
+</div>
+
+<div class="hud card" id="hint">🖱️ Geser = memutar kamera &nbsp;•&nbsp; Scroll = zoom</div>
+
+<div class="hud card" id="bar">
+  <button class="lvlbtn l1 on" data-lvl="1">LEVEL 1<br>NORMAL</button>
+  <button class="lvlbtn l2" data-lvl="2">LEVEL 2<br>WASPADA</button>
+  <button class="lvlbtn l3" data-lvl="3">LEVEL 3<br>SIAGA</button>
+  <button class="lvlbtn l4" data-lvl="4">LEVEL 4<br>AWAS</button>
+  <button id="auto">▶ Skenario<br>Otomatis</button>
+</div>
+
+<button class="hud card" id="matBtn">📖 Materi</button>
+
+<div class="hud card" id="panel">
+  <div id="tabs">
+    <div class="tab on" data-tab="materi">📚 Materi</div>
+    <div class="tab" data-tab="tanda">⚠️ Tanda-Tanda</div>
+    <div class="tab" data-tab="level">🏷️ Level</div>
+    <div class="tab" data-tab="mitigasi">🛟 Mitigasi</div>
+  </div>
+  <div id="pbody"></div>
+</div>
+
+<div id="loading"><div class="sp"></div><div>Memuat simulasi 3D…</div></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const loading = document.getElementById('loading');
+const flash = document.getElementById('flash');
+
+/* ---------------- Renderer / Scene ---------------- */
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance' });
+} catch (e) {
+  loading.innerHTML = '<div>⚠️ Browser tidak mendukung WebGL.</div>';
+  throw e;
+}
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setClearColor(0x14142a);
+document.getElementById('scene').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x14142a);
+scene.fog = new THREE.FogExp2(0x14142a, 0.0028);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 600);
+camera.position.set(36, 30, 44);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 10, 0);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.minDistance = 14;
+controls.maxDistance = 160;
+controls.maxPolarAngle = 1.45;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.7;
+let autoRotateTimer = null;
+controls.addEventListener('start', () => { controls.autoRotate = false; clearTimeout(autoRotateTimer); });
+controls.addEventListener('end', () => { clearTimeout(autoRotateTimer); autoRotateTimer = setTimeout(() => controls.autoRotate = true, 6000); });
+
+/* ---------------- Lights ---------------- */
+scene.add(new THREE.HemisphereLight(0x8fb8ff, 0x4a3f35, 0.85));
+const sun = new THREE.DirectionalLight(0xffe8c0, 1.3);
+sun.position.set(50, 70, 25);
+scene.add(sun);
+const lavaLight = new THREE.PointLight(0xff7a00, 0.15, 90, 1.8);
+lavaLight.position.set(0, 15.5, 0);
+scene.add(lavaLight);
+
+/* ---------------- Stars ---------------- */
+(function makeStars() {
+  const n = 700, pos = new Float32Array(n*3);
+  for (let i=0;i<n;i++) {
+    const r = 240 + Math.random()*160, t = Math.random()*Math.PI*2, p = Math.acos(2*Math.random()-1);
+    pos[i*3]   = r*Math.sin(p)*Math.cos(t);
+    pos[i*3+1] = Math.abs(r*Math.cos(p)) + 5;
+    pos[i*3+2] = r*Math.sin(p)*Math.sin(t);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  const m = new THREE.PointsMaterial({ color:0xffffff, size:1.6, transparent:true, opacity:0.85, fog:false });
+  scene.add(new THREE.Points(g,m));
+})();
+
+/* ---------------- Ground ---------------- */
+const ground = new THREE.Mesh(
+  new THREE.CircleGeometry(95, 64),
+  new THREE.MeshStandardMaterial({ color:0x3c5133, roughness:1 })
+);
+ground.rotation.x = -Math.PI/2;
+scene.add(ground);
+
+/* ---------------- Volcano ---------------- */
+const volcanoGeo = new THREE.ConeGeometry(14, 16, 48, 10);
+{
+  const p = volcanoGeo.attributes.position, v = new THREE.Vector3();
+  for (let i=0;i<p.count;i++) {
+    v.fromBufferAttribute(p,i);
+    const n = (Math.random()-0.5)*0.9;
+    v.x += n; v.z += n; v.y += (Math.random()-0.5)*0.35;
+    p.setXYZ(i,v.x,v.y,v.z);
+  }
+  volcanoGeo.computeVertexNormals();
+}
+const volcanoMat = new THREE.MeshStandardMaterial({
+  color:0x8a6d4f, flatShading:true, roughness:1,
+  emissive:0xff4500, emissiveIntensity:0.0
+});
+const volcano = new THREE.Mesh(volcanoGeo, volcanoMat);
+scene.add(volcano);
+
+/* Crater rim */
+const rim = new THREE.Mesh(
+  new THREE.TorusGeometry(2.1, 0.55, 10, 28),
+  new THREE.MeshStandardMaterial({ color:0x3a2d24, roughness:1, emissive:0xff5500, emissiveIntensity:0 })
+);
+rim.rotation.x = Math.PI/2;
+rim.position.y = 14.7;
+scene.add(rim);
+
+/* Lava pool */
+const poolMat = new THREE.MeshBasicMaterial({ color:0x331100 });
+const pool = new THREE.Mesh(new THREE.CircleGeometry(1.9, 24), poolMat);
+pool.rotation.x = -Math.PI/2;
+pool.position.y = 14.75;
+scene.add(pool);
+const poolGlow = new THREE.Mesh(
+  new THREE.SphereGeometry(1.35, 16, 12),
+  new THREE.MeshBasicMaterial({ color:0xff8c00, transparent:true, opacity:0.9, blending:THREE.AdditiveBlending, depthWrite:false })
+);
+poolGlow.position.y = 15.0;
+scene.add(poolGlow);
+
+/* Rocks */
+for (let i=0;i<55;i++) {
+  const r = 6 + Math.random()*70, a = Math.random()*Math.PI*2, s = 0.3+Math.random()*1.0;
+  const rock = new THREE.Mesh(
+    new THREE.DodecahedronGeometry(s, 0),
+    new THREE.MeshStandardMaterial({ color:0x5a5048, flatShading:true, roughness:1 })
+  );
+  rock.position.set(Math.cos(a)*r, s*0.4, Math.sin(a)*r);
+  rock.rotation.set(Math.random()*3, Math.random()*3, Math.random()*3);
+  scene.add(rock);
+}
+
+/* Houses (zona aman) */
+for (let i=0;i<9;i++) {
+  const a = i/9*Math.PI*2 + 0.4, r = 62 + Math.random()*10;
+  const h = 1.2 + Math.random()*1.0;
+  const house = new THREE.Mesh(
+    new THREE.BoxGeometry(1.8, h, 1.8),
+    new THREE.MeshStandardMaterial({ color:0x6b5a48, roughness:1, emissive:0x33220a, emissiveIntensity:0.35 })
+  );
+  house.position.set(Math.cos(a)*r, h/2, Math.sin(a)*r);
+  house.rotation.y = Math.random()*Math.PI;
+  scene.add(house);
+}
+
+/* ---------------- Zona bahaya rings ---------------- */
+function makeRing(radius, color, label) {
+  const g = new THREE.RingGeometry(radius-1, radius+1, 64);
+  const m = new THREE.MeshBasicMaterial({ color, transparent:true, opacity:0.13, side:THREE.DoubleSide, depthWrite:false });
+  const ring = new THREE.Mesh(g, m);
+  ring.rotation.x = -Math.PI/2;
+  ring.position.y = 0.05;
+  ring.visible = false;
+  scene.add(ring);
+  const sp = makeLabel(label, color);
+  sp.position.set(0, 0.6, -radius);
+  sp.visible = false;
+  scene.add(sp);
+  return { ring, sp };
+}
+function makeLabel(text, color) {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 128;
+  const ctx = c.getContext('2d');
+  ctx.font = 'bold 44px system-ui, sans-serif';
+  const w = ctx.measureText(text).width;
+  ctx.fillStyle = 'rgba(10,10,24,0.72)';
+  ctx.beginPath(); ctx.roundRect(16, 16, w+44, 84, 42); ctx.fill();
+  ctx.strokeStyle = color; ctx.lineWidth = 6; ctx.beginPath(); ctx.roundRect(16, 16, w+44, 84, 42); ctx.stroke();
+  ctx.fillStyle = color; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, 38 + w/2, 58);
+  const tex = new THREE.CanvasTexture(c);
+  const m = new THREE.SpriteMaterial({ map:tex, transparent:true, depthTest:false, fog:false });
+  const s = new THREE.Sprite(m);
+  s.scale.set(9, 2.25, 1);
+  s.renderOrder = 10;
+  return s;
+}
+const zones = [
+  makeRing(17, 0xffd000, 'Radius Kawah (±1 km) — L2'),
+  makeRing(36, 0xff8c00, 'Radius Siaga (3–5 km) — L3'),
+  makeRing(58, 0xff3030, 'Zona Evakuasi — L4'),
+];
+
+/* ---------------- Particles ---------------- */
+function makeGlowTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(32,32,0,32,32,32);
+  g.addColorStop(0,'rgba(255,255,255,1)');
+  g.addColorStop(0.4,'rgba(255,255,255,0.55)');
+  g.addColorStop(1,'rgba(255,255,255,0)');
+  ctx.fillStyle = g; ctx.fillRect(0,0,64,64);
+  return new THREE.CanvasTexture(c);
+}
+const glowTex = makeGlowTexture();
+
+function makeParticleMat(blending) {
+  return new THREE.ShaderMaterial({
+    uniforms: { uMap: { value: glowTex } },
+    vertexShader: `
+      attribute float aSize; attribute vec3 aColor; attribute float aAlpha;
+      varying vec3 vColor; varying float vAlpha;
+      void main() {
+        vColor = aColor; vAlpha = aAlpha;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        gl_PointSize = clamp(aSize * (260.0 / -mv.z), 0.0, 130.0);
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      uniform sampler2D uMap;
+      varying vec3 vColor; varying float vAlpha;
+      void main() {
+        vec4 t = texture2D(uMap, gl_PointCoord);
+        gl_FragColor = vec4(vColor, vAlpha * t.a);
+      }`,
+    transparent: true, depthWrite: false, blending
+  });
+}
+const matAdd  = makeParticleMat(THREE.AdditiveBlending);
+const matNorm = makeParticleMat(THREE.NormalBlending);
+
+const _c = [0,0,0];
+function lerp3(out, c1, c2, t) {
+  t = Math.min(1, Math.max(0, t));
+  out[0] = ((c1>>16)&255)/255 + (((c2>>16)&255)/255 - ((c1>>16)&255)/255)*t;
+  out[1] = ((c1>>8)&255)/255  + (((c2>>8)&255)/255  - ((c1>>8)&255)/255)*t;
+  out[2] = (c1&255)/255       + ((c2&255)/255       - (c1&255)/255)*t;
+}
+
+class Particles {
+  constructor(count, spawn, step, mat) {
+    this.n = count; this.spawnFn = spawn; this.stepFn = step;
+    this.pos = new Float32Array(count*3);
+    this.vel = new Float32Array(count*3);
+    this.life = new Float32Array(count);
+    this.maxLife = new Float32Array(count);
+    this.col = new Float32Array(count*3);
+    this.alpha = new Float32Array(count);
+    this.size = new Float32Array(count);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(this.pos,3));
+    geo.setAttribute('aColor', new THREE.BufferAttribute(this.col,3));
+    geo.setAttribute('aAlpha', new THREE.BufferAttribute(this.alpha,1));
+    geo.setAttribute('aSize', new THREE.BufferAttribute(this.size,1));
+    this.geo = geo;
+    this.points = new THREE.Points(geo, mat);
+    this.points.frustumCulled = false;
+    this.cursor = 0; this.acc = 0;
+    scene.add(this.points);
+  }
+  emit(rate, dt) {
+    this.acc += rate * dt;
+    let n = Math.floor(this.acc);
+    if (n > 0) this.acc -= n;
+    for (let k=0;k<n;k++) {
+      const i = this.cursor; this.cursor = (this.cursor+1) % this.n;
+      this.life[i] = this.maxLife[i] = this.spawnFn(i);
+    }
+  }
+  update(dt) {
+    for (let i=0;i<this.n;i++) {
+      if (this.life[i] > 0) { this.life[i] -= dt; this.stepFn(i, dt); }
+      else this.alpha[i] = 0;
+    }
+    this.geo.attributes.position.needsUpdate = true;
+    this.geo.attributes.aColor.needsUpdate = true;
+    this.geo.attributes.aAlpha.needsUpdate = true;
+    this.geo.attributes.aSize.needsUpdate = true;
+  }
+}
+
+/* Lava fountain */
+const lava = new Particles(420,
+  (i) => {
+    const a = Math.random()*Math.PI*2, r = Math.random()*1.6;
+    lava.pos[i*3] = Math.cos(a)*r; lava.pos[i*3+1] = 16.1+Math.random()*1.5; lava.pos[i*3+2] = Math.sin(a)*r;
+    const up = (13+Math.random()*11)*cur.fount, h = (Math.random()-0.5)*8;
+    lava.vel[i*3] = Math.cos(a)*h + (Math.random()-0.5)*3;
+    lava.vel[i*3+1] = up;
+    lava.vel[i*3+2] = Math.sin(a)*h + (Math.random()-0.5)*3;
+    return 1.3 + Math.random()*1.7;
+  },
+  (i, dt) => {
+    const t = 1 - lava.life[i]/lava.maxLife[i];
+    lava.vel[i*3+1] -= 30*dt;
+    lava.pos[i*3]   += lava.vel[i*3]*dt;
+    lava.pos[i*3+1] += lava.vel[i*3+1]*dt;
+    lava.pos[i*3+2] += lava.vel[i*3+2]*dt;
+    if (t < 0.35) lerp3(_c, 0xfff2a0, 0xff8c1a, t/0.35);
+    else lerp3(_c, 0xff8c1a, 0x5a0f00, (t-0.35)/0.65);
+    lava.col[i*3]=_c[0]; lava.col[i*3+1]=_c[1]; lava.col[i*3+2]=_c[2];
+    lava.alpha[i] = t < 0.75 ? 1 : 1-(t-0.75)/0.25;
+    lava.size[i] = 2.6 - t*1.2;
+    if (lava.pos[i*3+1] < 0.5) lava.life[i] = 0;
+  }, matAdd);
+
+/* Ash column */
+const ash = new Particles(340,
+  (i) => {
+    const a = Math.random()*Math.PI*2, r = 1 + Math.random()*3;
+    ash.pos[i*3] = Math.cos(a)*r; ash.pos[i*3+1] = 16.5+Math.random()*2; ash.pos[i*3+2] = Math.sin(a)*r;
+    ash.vel[i*3] = 2.2 + (Math.random()-0.5)*1.5;
+    ash.vel[i*3+1] = 5 + Math.random()*5;
+    ash.vel[i*3+2] = (Math.random()-0.5)*1.5;
+    return 5 + Math.random()*5;
+  },
+  (i, dt) => {
+    const t = 1 - ash.life[i]/ash.maxLife[i];
+    ash.vel[i*3+1] -= 1.1*dt;
+    ash.pos[i*3]   += ash.vel[i*3]*dt;
+    ash.pos[i*3+1] += ash.vel[i*3+1]*dt;
+    ash.pos[i*3+2] += ash.vel[i*3+2]*dt;
+    lerp3(_c, 0xd0d0d0, 0x3a3a3a, t);
+    ash.col[i*3]=_c[0]; ash.col[i*3+1]=_c[1]; ash.col[i*3+2]=_c[2];
+    ash.alpha[i] = t < 0.8 ? 0.5 : 0.5*(1-(t-0.8)/0.2);
+    ash.size[i] = 3.5 + t*10;
+  }, matNorm);
+
+/* Ash fall */
+const fall = new Particles(300,
+  (i) => {
+    fall.pos[i*3] = (Math.random()-0.5)*110;
+    fall.pos[i*3+1] = 36 + Math.random()*16;
+    fall.pos[i*3+2] = (Math.random()-0.5)*110;
+    fall.vel[i*3] = (Math.random()-0.5)*1.2;
+    fall.vel[i*3+1] = -(1.5 + Math.random()*2.5);
+    fall.vel[i*3+2] = (Math.random()-0.5)*1.2;
+    return 12 + Math.random()*6;
+  },
+  (i, dt) => {
+    const t = 1 - fall.life[i]/fall.maxLife[i];
+    fall.vel[i*3] = Math.sin(performance.now()*0.001 + i)*0.35;
+    fall.vel[i*3+2] = Math.cos(performance.now()*0.0008 + i*2)*0.35;
+    fall.pos[i*3] += fall.vel[i*3]*dt;
+    fall.pos[i*3+1] += fall.vel[i*3+1]*dt;
+    fall.pos[i*3+2] += fall.vel[i*3+2]*dt;
+    fall.col[i*3]=0.6; fall.col[i*3+1]=0.6; fall.col[i*3+2]=0.6;
+    fall.alpha[i] = t < 0.85 ? 0.38 : 0.38*(1-(t-0.85)/0.15);
+    fall.size[i] = 1.7 + Math.random()*1.3;
+    if (fall.pos[i*3+1] < 0.3) fall.life[i] = 0;
+  }, matNorm);
+
+/* Steam */
+const steam = new Particles(160,
+  (i) => {
+    const a = Math.random()*Math.PI*2, r = Math.random()*1.2;
+    steam.pos[i*3] = Math.cos(a)*r; steam.pos[i*3+1] = 15.5+Math.random()*1.5; steam.pos[i*3+2] = Math.sin(a)*r;
+    steam.vel[i*3] = (Math.random()-0.5)*0.8;
+    steam.vel[i*3+1] = 2.5 + Math.random()*2;
+    steam.vel[i*3+2] = (Math.random()-0.5)*0.8;
+    return 2.5 + Math.random()*2.5;
+  },
+  (i, dt) => {
+    const t = 1 - steam.life[i]/steam.maxLife[i];
+    steam.pos[i*3] += steam.vel[i*3]*dt;
+    steam.pos[i*3+1] += steam.vel[i*3+1]*dt;
+    steam.pos[i*3+2] += steam.vel[i*3+2]*dt;
+    steam.col[i*3]=1; steam.col[i*3+1]=1; steam.col[i*3+2]=1;
+    steam.alpha[i] = 0.2*(1-t);
+    steam.size[i] = 2.5 + t*5;
+  }, matNorm);
+
+/* Lava streams down slope */
+const flow = new Particles(260,
+  (i) => {
+    const a = Math.random()*Math.PI*2, r = 1.6+Math.random()*0.8;
+    flow.pos[i*3] = Math.cos(a)*r; flow.pos[i*3+1] = 14.9; flow.pos[i*3+2] = Math.sin(a)*r;
+    const sp = 3.5 + Math.random()*2.5;
+    flow.vel[i*3] = Math.cos(a)*sp;
+    flow.vel[i*3+1] = -(1.6 + Math.random()*1.2);
+    flow.vel[i*3+2] = Math.sin(a)*sp;
+    return 4 + Math.random()*3;
+  },
+  (i, dt) => {
+    const t = 1 - flow.life[i]/flow.maxLife[i];
+    flow.vel[i*3+1] -= 1.2*dt;
+    flow.pos[i*3] += flow.vel[i*3]*dt;
+    flow.pos[i*3+1] += flow.vel[i*3+1]*dt;
+    flow.pos[i*3+2] += flow.vel[i*3+2]*dt;
+    lerp3(_c, 0xff8a2a, 0x551000, t);
+    flow.col[i*3]=_c[0]; flow.col[i*3+1]=_c[1]; flow.col[i*3+2]=_c[2];
+    flow.alpha[i] = t < 0.8 ? 0.9 : 0.9*(1-(t-0.8)/0.2);
+    flow.size[i] = 1.9 - t*0.5;
+    if (flow.pos[i*3+1] < 0.6) flow.life[i] = 0;
+  }, matAdd);
+
+/* ---------------- Level config ---------------- */
+const CFG = {
+  1: { glow:0.06, lava:0,   ash:0,   fall:0,  steam:20, flow:0,   shake:0,    fount:1,   flash:0 },
+  2: { glow:0.25, lava:0,   ash:0,   fall:0,  steam:42, flow:0,   shake:0,    fount:1,   flash:0 },
+  3: { glow:0.8,  lava:55,  ash:16,  fall:0,  steam:26, flow:45,  shake:0.12, fount:1,   flash:0.12 },
+  4: { glow:1.8,  lava:160, ash:75,  fall:55, steam:0,  flow:130, shake:0.4,  fount:1.15, flash:0.5 },
+};
+const cur = { glow:0.06, lava:0, ash:0, fall:0, steam:20, flow:0, shake:0, fount:1, flash:0 };
+
+const LEVEL_INFO = {
+  1: { name:'NORMAL', color:'#22c55e', desc:'Aktivitas gunung normal. Tidak ada indikasi bahaya.', radius:'—' },
+  2: { name:'WASPADA', color:'#eab308', desc:'Ada peningkatan aktivitas seismik & visual. Potensi bahaya belum jelas.', radius:'Dilarang mendekati kawah (±1 km)' },
+  3: { name:'SIAGA', color:'#f97316', desc:'Aktivitas meningkat signifikan. Erupsi berpotensi terjadi dalam hitungan minggu.', radius:'Radius larangan diperluas (3–5 km)' },
+  4: { name:'AWAS', color:'#ef4444', desc:'Erupsi besar mengancam permukiman. Status tertinggi — evakuasi!', radius:'Evakuasi wilayah terancam' },
+};
+
+let level = 1;
+const stName = document.getElementById('stName');
+const stDesc = document.getElementById('stDesc');
+const stRadius = document.getElementById('stRadius');
+function setLevel(n) {
+  level = n;
+  document.querySelectorAll('.lvlbtn').forEach(b => b.classList.toggle('on', +b.dataset.lvl === n));
+  const info = LEVEL_INFO[n];
+  stName.textContent = info.name;
+  stName.style.color = info.color;
+  stDesc.textContent = info.desc;
+  stRadius.textContent = info.radius;
+  zones.forEach((z, i) => { const on = n >= i+2; z.ring.visible = on; z.sp.visible = on; });
+}
+document.querySelectorAll('.lvlbtn').forEach(b =>
+  b.addEventListener('click', () => { stopScenario(); setLevel(+b.dataset.lvl); })
+);
+
+/* ---------------- Auto scenario ---------------- */
+const SCENARIO = [ {lvl:2,d:3.5},{lvl:3,d:4.5},{lvl:4,d:6.5},{lvl:3,d:3.5},{lvl:2,d:3},{lvl:1,d:2} ];
+let scenario = null, scIdx = 0, scT = 0;
+const autoBtn = document.getElementById('auto');
+function stopScenario() {
+  scenario = null; scIdx = 0; scT = 0;
+  autoBtn.classList.remove('on'); autoBtn.textContent = '▶ Skenario\nOtomatis';
+}
+autoBtn.addEventListener('click', () => {
+  if (scenario) { stopScenario(); return; }
+  scenario = true; scIdx = 0; scT = 0;
+  autoBtn.classList.add('on'); autoBtn.textContent = '⏸ Hentikan';
+  setLevel(1);
+});
+
+/* ---------------- Materi panel ---------------- */
+const CONTENTS = {
+  materi: `
+    <h3>📚 Apa itu gunung meletus?</h3>
+    <p>Gunung meletus adalah peristiwa keluarnya <b>magma</b> dari perut bumi ke permukaan, didorong oleh tekanan gas yang sangat tinggi.</p>
+    <h3>Penyebab</h3>
+    <ul>
+      <li>Tekanan gas dalam magma meningkat</li>
+      <li>Pergerakan lempeng tektonik</li>
+      <li>Aktivitas dapur magma (magma chamber)</li>
+    </ul>
+    <h3>Material yang dikeluarkan</h3>
+    <ul>
+      <li><b>Lava</b> — batuan cair pijar (700–1.200 °C)</li>
+      <li><b>Awan panas / piroklastik</b> — campuran gas & material panas (300–800 °C), meluncur 100–300 km/jam</li>
+      <li><b>Abu vulkanik</b> — partikel halus yang bisa terbawa angin ratusan km</li>
+      <li><b>Lahar</b> — lumpur batu dari abu bercampur air hujan</li>
+      <li><b>Gas vulkanik</b> — CO₂, SO₂, H₂S</li>
+      <li><b>Bom vulkanik</b> — bongkahan batuan besar yang terlontar</li>
+    </ul>
+    <p class="note">Indonesia memiliki ±127 gunung api aktif — terbanyak di dunia.</p>`,
+  tanda: `
+    <h3>⚠️ Tanda-tanda gunung akan meletus</h3>
+    <ul>
+      <li>Kegempaan vulkanik meningkat, kadang terasa gemuruh</li>
+      <li>Suhu di sekitar kawah naik, mata air mengering atau menjadi panas</li>
+      <li>Keluar asap tebal dan gas berbau belerang</li>
+      <li>Hewan liar turun dari gunung</li>
+      <li>Tanah merekah, tumbuhan di sekitar kawah layu</li>
+      <li>Permukaan kawah terangkat atau danau kawah berubah warna</li>
+    </ul>
+    <p class="note">Coba geser tombol Level di bawah dan amati perubahan visual gunung!</p>`,
+  level: `
+    <h3>🏷️ Level status gunung api (Indonesia)</h3>
+    <div class="lvrow"><span class="dot" style="background:#22c55e"></span><div><b>Level I — Normal</b><br>Aktivitas normal, tidak ada indikasi bahaya.</div></div>
+    <div class="lvrow"><span class="dot" style="background:#eab308"></span><div><b>Level II — Waspada</b><br>Peningkatan aktivitas seismik/visual. Dilarang mendekati kawah (contoh radius ±1 km).</div></div>
+    <div class="lvrow"><span class="dot" style="background:#f97316"></span><div><b>Level III — Siaga</b><br>Peningkatan signifikan; erupsi berpotensi dalam hitungan minggu. Radius larangan diperluas (contoh 3–5 km).</div></div>
+    <div class="lvrow"><span class="dot" style="background:#ef4444"></span><div><b>Level IV — Awas</b><br>Erupsi besar mengancam permukiman; status tertinggi. Evakuasi wilayah terancam.</div></div>
+    <p class="note">Radius resmi ditetapkan PVMBG dan berbeda-beda untuk setiap gunung.</p>`,
+  mitigasi: `
+    <h3>🛟 Cara menghadapi erupsi</h3>
+    <ul>
+      <li>Kenali zona rawan bencana di sekitar gunung</li>
+      <li>Siapkan tas siaga: masker, senter, air minum, dokumen penting</li>
+      <li>Ikuti arahan BPBD / PVMBG — jangan masuk radius larangan</li>
+      <li>Saat erupsi: tutup mulut & hidung dengan masker atau kain basah</li>
+      <li>Hindari lembah sungai — itu jalur lahar</li>
+      <li>Waspadai hujan abu: tutup rumah, matikan AC, lindungi mata & pernapasan</li>
+      <li>Evakuasi ke tempat aman sesuai arahan, jangan mendekat untuk menonton</li>
+    </ul>
+    <p class="note">Lihat lingkaran merah di simulasi: zona evakuasi saat Level 4.</p>`
+};
+const pbody = document.getElementById('pbody');
+const panel = document.getElementById('panel');
+function showTab(t) { pbody.innerHTML = CONTENTS[t]; document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x.dataset.tab === t)); }
+showTab('materi');
+document.querySelectorAll('.tab').forEach(x => x.addEventListener('click', () => showTab(x.dataset.tab)));
+document.getElementById('matBtn').addEventListener('click', () => panel.classList.toggle('open'));
+
+/* ---------------- Main loop ---------------- */
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  let dt = Math.min(clock.getDelta(), 0.05);
+
+  /* lerp level config */
+  const c = CFG[level];
+  for (const k in cur) cur[k] += (c[k] - cur[k]) * Math.min(1, dt*2.2);
+
+  /* emit */
+  lava.emit(cur.lava, dt);
+  ash.emit(cur.ash, dt);
+  fall.emit(cur.fall, dt);
+  steam.emit(cur.steam, dt);
+  flow.emit(cur.flow, dt);
+
+  /* update particles */
+  lava.update(dt); ash.update(dt); fall.update(dt); steam.update(dt); flow.update(dt);
+
+  /* volcano visuals */
+  volcanoMat.emissiveIntensity = cur.glow * 0.35;
+  rim.material.emissiveIntensity = cur.glow * 0.8;
+  poolMat.color.setHSL(0.07, 0.95, 0.05 + cur.glow*0.22);
+  poolGlow.material.opacity = 0.25 + cur.glow*0.5;
+  lavaLight.intensity = cur.glow * 1.7;
+  flash.style.opacity = cur.flash * (0.6 + 0.4*Math.sin(performance.now()*0.02));
+
+  /* auto scenario */
+  if (scenario) {
+    scT += dt;
+    if (scT > SCENARIO[scIdx].d) {
+      scIdx++;
+      if (scIdx >= SCENARIO.length) stopScenario();
+      else { setLevel(SCENARIO[scIdx].lvl); scT = 0; }
+    }
+  }
+
+  controls.update();
+  if (cur.shake > 0.001) {
+    camera.position.x += (Math.random()-0.5)*cur.shake;
+    camera.position.y += (Math.random()-0.5)*cur.shake;
+  }
+  renderer.render(scene, camera);
+}
+animate();
+
+/* ---------------- Resize ---------------- */
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+loading.classList.add('hide');
+</script>
+</body>
+</html>
